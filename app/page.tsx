@@ -1,356 +1,213 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 type Severity = "High" | "Medium" | "Low";
-type TimeWindow = "Peak" | "Off-peak" | "Weekend";
-type KpiKey =
-  | "coverage"
-  | "frequency"
-  | "connectivity"
-  | "populationNeed"
-  | "firstLastMile";
-type Layer = "stops" | "gaps" | "demographics" | "energy";
-type AlertLevel = "critical" | "warning";
 
-type GapRecord = {
+type Gap = {
   id: string;
   county: string;
   area: string;
   route: string;
   gapType: string;
   severity: Severity;
-  affectedPopulation: number;
-  seniorDensity: number;
-  noVehicleRate: number;
-  lowIncomeRate: number;
-  stopDistanceMeters: number;
-  tripsPerHourPeak: number;
-  tripsPerHourOffpeak: number;
-  weekendTripsPerHour: number;
-  travelTimeIndex: number;
-  energyKwhPerKm: number;
-  hasBarrier: boolean;
-  recommendation: string;
+  population: number;
+  energy: number;
+  action: string;
 };
 
-type Stop = {
-  id: string;
-  county: string;
-  name: string;
-  x: number;
-  y: number;
-  routes: string[];
-};
-
-type Zone = {
-  id: string;
-  county: string;
-  label: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-};
-
-type Anomaly = {
-  id: string;
-  level: AlertLevel;
-  title: string;
-  body: string;
-};
-
-const zones: Zone[] = [
-  { id: "sedgwick-central", county: "Sedgwick", label: "Sedgwick", x: 15, y: 20, width: 24, height: 24 },
-  { id: "shawnee-north", county: "Shawnee", label: "Shawnee", x: 43, y: 12, width: 20, height: 20 },
-  { id: "wyandotte-east", county: "Wyandotte", label: "Wyandotte", x: 67, y: 10, width: 18, height: 18 },
-  { id: "johnson-metro", county: "Johnson", label: "Johnson", x: 63, y: 31, width: 22, height: 20 },
-  { id: "douglas-corridor", county: "Douglas", label: "Douglas", x: 43, y: 37, width: 18, height: 18 },
+const DATA: Gap[] = [
+  { id: "1", county: "Sedgwick", area: "South Wichita", route: "12", gapType: "No weekend service", severity: "High", population: 12400, energy: 1.46, action: "Weekend feeder pilot" },
+  { id: "2", county: "Shawnee", area: "North Topeka", route: "4", gapType: "Low off-peak", severity: "High", population: 9800, energy: 1.58, action: "Add off-peak trips" },
+  { id: "3", county: "Wyandotte", area: "Argentine", route: "20", gapType: "Coverage gap", severity: "High", population: 11200, energy: 1.63, action: "New local corridor" },
+  { id: "4", county: "Johnson", area: "Overland South", route: "3", gapType: "First/last mile", severity: "Medium", population: 6900, energy: 1.21, action: "Sidewalk gaps" },
+  { id: "5", county: "Douglas", area: "Lawrence East", route: "9", gapType: "Evening service", severity: "Low", population: 4300, energy: 1.14, action: "Monitor demand" },
 ];
 
-const initialData: GapRecord[] = [
-  {
-    id: "g1",
-    county: "Sedgwick",
-    area: "South Wichita",
-    route: "Route 12",
-    gapType: "No weekend service",
-    severity: "High",
-    affectedPopulation: 12400,
-    seniorDensity: 0.31,
-    noVehicleRate: 0.24,
-    lowIncomeRate: 0.29,
-    stopDistanceMeters: 980,
-    tripsPerHourPeak: 2.1,
-    tripsPerHourOffpeak: 1.0,
-    weekendTripsPerHour: 0,
-    travelTimeIndex: 1.52,
-    energyKwhPerKm: 1.46,
-    hasBarrier: true,
-    recommendation: "Priorita alta: attivare servizio weekend minimo + navette feeder.",
-  },
-  {
-    id: "g2",
-    county: "Sedgwick",
-    area: "Park City",
-    route: "Route 7",
-    gapType: "Stop distance > 800m",
-    severity: "Medium",
-    affectedPopulation: 7600,
-    seniorDensity: 0.22,
-    noVehicleRate: 0.16,
-    lowIncomeRate: 0.21,
-    stopDistanceMeters: 860,
-    tripsPerHourPeak: 2.5,
-    tripsPerHourOffpeak: 1.3,
-    weekendTripsPerHour: 0.5,
-    travelTimeIndex: 1.38,
-    energyKwhPerKm: 1.35,
-    hasBarrier: true,
-    recommendation: "Nuove fermate intermedie e adeguamento attraversamenti pedonali.",
-  },
-  {
-    id: "g3",
-    county: "Shawnee",
-    area: "North Topeka",
-    route: "Route 4",
-    gapType: "Low off-peak frequency",
-    severity: "High",
-    affectedPopulation: 9800,
-    seniorDensity: 0.27,
-    noVehicleRate: 0.19,
-    lowIncomeRate: 0.25,
-    stopDistanceMeters: 700,
-    tripsPerHourPeak: 2.8,
-    tripsPerHourOffpeak: 0.7,
-    weekendTripsPerHour: 0.2,
-    travelTimeIndex: 1.61,
-    energyKwhPerKm: 1.58,
-    hasBarrier: false,
-    recommendation: "Aumentare headway off-peak e introdurre express connection.",
-  },
-  {
-    id: "g4",
-    county: "Wyandotte",
-    area: "Argentine",
-    route: "Route 20",
-    gapType: "Coverage blind spot",
-    severity: "High",
-    affectedPopulation: 11200,
-    seniorDensity: 0.19,
-    noVehicleRate: 0.28,
-    lowIncomeRate: 0.34,
-    stopDistanceMeters: 1200,
-    tripsPerHourPeak: 1.4,
-    tripsPerHourOffpeak: 0.5,
-    weekendTripsPerHour: 0.1,
-    travelTimeIndex: 1.74,
-    energyKwhPerKm: 1.63,
-    hasBarrier: true,
-    recommendation: "Creare nuova linea locale e corridoi pedonali protetti.",
-  },
-  {
-    id: "g5",
-    county: "Johnson",
-    area: "Overland Park South",
-    route: "Route 3",
-    gapType: "First/last mile barriers",
-    severity: "Medium",
-    affectedPopulation: 6900,
-    seniorDensity: 0.17,
-    noVehicleRate: 0.12,
-    lowIncomeRate: 0.14,
-    stopDistanceMeters: 640,
-    tripsPerHourPeak: 3.2,
-    tripsPerHourOffpeak: 1.7,
-    weekendTripsPerHour: 1.2,
-    travelTimeIndex: 1.28,
-    energyKwhPerKm: 1.21,
-    hasBarrier: true,
-    recommendation: "Migliorare marciapiedi e sicurezza attraversamenti ai nodi.",
-  },
-  {
-    id: "g6",
-    county: "Douglas",
-    area: "Lawrence East",
-    route: "Route 9",
-    gapType: "Low evening service",
-    severity: "Low",
-    affectedPopulation: 4300,
-    seniorDensity: 0.14,
-    noVehicleRate: 0.11,
-    lowIncomeRate: 0.16,
-    stopDistanceMeters: 520,
-    tripsPerHourPeak: 3.6,
-    tripsPerHourOffpeak: 1.9,
-    weekendTripsPerHour: 1.1,
-    travelTimeIndex: 1.18,
-    energyKwhPerKm: 1.14,
-    hasBarrier: false,
-    recommendation: "Monitorare domanda serale e testare micro-adjustment orari.",
-  },
-];
-
-const stops: Stop[] = [
-  { id: "s1", county: "Sedgwick", name: "Wichita Downtown", x: 23, y: 36, routes: ["Route 12", "Route 7"] },
-  { id: "s2", county: "Shawnee", name: "Topeka Quincy", x: 53, y: 22, routes: ["Route 4"] },
-  { id: "s3", county: "Wyandotte", name: "Kansas City Hub", x: 76, y: 18, routes: ["Route 20", "Route 3"] },
-  { id: "s4", county: "Johnson", name: "Overland Transit", x: 72, y: 39, routes: ["Route 3"] },
-  { id: "s5", county: "Douglas", name: "Lawrence Terminal", x: 52, y: 44, routes: ["Route 9"] },
-];
-
-const baseAnomalies: Anomaly[] = [
-  {
-    id: "a1",
-    level: "critical",
-    title: "Zero Service Day Detected",
-    body: "Route 7 shows zero scheduled service on Sunday in Sedgwick.",
-  },
-  {
-    id: "a2",
-    level: "critical",
-    title: "Weekend Coverage Collapse",
-    body: "Wyandotte loses 60% of service after 20:00 on Saturday.",
-  },
-  {
-    id: "a3",
-    level: "warning",
-    title: "Frequency Drop Alert",
-    body: "Shawnee off-peak frequency dropped below minimum target.",
-  },
-];
-
-function severityColor(severity: Severity): string {
-  if (severity === "High") return "bg-red-500/20 text-red-700 dark:text-red-300";
-  if (severity === "Medium") return "bg-amber-500/20 text-amber-700 dark:text-amber-300";
-  return "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300";
+function sevBadge(s: Severity): string {
+  if (s === "High") return "bg-red-500/15 text-red-700 dark:text-red-300";
+  if (s === "Medium") return "bg-amber-500/15 text-amber-700 dark:text-amber-300";
+  return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
 }
 
-function levelColor(level: AlertLevel): string {
-  if (level === "critical") return "bg-red-500/20 text-red-700 dark:text-red-300";
-  return "bg-amber-500/20 text-amber-700 dark:text-amber-300";
-}
+const COUNTIES = ["All", "Sedgwick", "Shawnee", "Wyandotte", "Johnson", "Douglas"];
 
-function scoreSeverity(gap: GapRecord): number {
-  return gap.severity === "High" ? 3 : gap.severity === "Medium" ? 2 : 1;
-}
+export default function Page() {
+  const [county, setCounty] = useState("All");
+  const [severity, setSeverity] = useState<"All" | Severity>("All");
+  const [pick, setPick] = useState<string | null>(null);
 
-function average(values: number[]): number {
-  if (values.length === 0) return 0;
-  return values.reduce((total, value) => total + value, 0) / values.length;
-}
-
-function sparkBars(value: number): number[] {
-  const base = Math.max(12, Math.min(92, Math.round(value)));
-  return [base * 0.5, base * 0.75, base, base * 0.82];
-}
-
-function AnimatedPercent({ value }: { value: number }) {
-  const [display, setDisplay] = useState(0);
-
-  useEffect(() => {
-    let frame = 0;
-    const start = performance.now();
-    const duration = 650;
-    const step = (now: number) => {
-      const progress = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplay(Math.round(value * eased));
-      if (progress < 1) frame = requestAnimationFrame(step);
-    };
-    frame = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame);
-  }, [value]);
-
-  return <>{display}</>;
-}
-
-export default function HomePage() {
-  const counties = useMemo(
-    () => ["All counties", ...Array.from(new Set(initialData.map((g) => g.county)))],
-    []
-  );
-  const routes = useMemo(
-    () => ["All routes", ...Array.from(new Set(initialData.map((g) => g.route)))],
-    []
-  );
-
-  const [countyFilter, setCountyFilter] = useState("All counties");
-  const [severityFilter, setSeverityFilter] = useState<Severity | "All">("All");
-  const [routeFilter, setRouteFilter] = useState("All routes");
-  const [timeWindow, setTimeWindow] = useState<TimeWindow>("Peak");
-  const [selectedZone, setSelectedZone] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<"severity" | "population">("severity");
-  const [alerts, setAlerts] = useState<Anomaly[]>(baseAnomalies);
-  const [regenerating, setRegenerating] = useState(false);
-  const [layers, setLayers] = useState<Record<Layer, boolean>>({
-    stops: true,
-    gaps: true,
-    demographics: true,
-    energy: false,
-  });
-
-  const filteredData = useMemo(() => {
-    return initialData.filter((gap) => {
-      const matchCounty = countyFilter === "All counties" || gap.county === countyFilter;
-      const matchSeverity = severityFilter === "All" || gap.severity === severityFilter;
-      const matchRoute = routeFilter === "All routes" || gap.route === routeFilter;
-      const matchZone = !selectedZone || gap.id === selectedZone || gap.county === selectedZone;
-      return matchCounty && matchSeverity && matchRoute && matchZone;
+  const rows = useMemo(() => {
+    return DATA.filter((g) => {
+      const c = county === "All" || g.county === county;
+      const s = severity === "All" || g.severity === severity;
+      return c && s;
     });
-  }, [countyFilter, severityFilter, routeFilter, selectedZone]);
-
-  const sortedData = useMemo(() => {
-    const copy = [...filteredData];
-    if (sortBy === "severity") {
-      copy.sort((a, b) => {
-        const s = scoreSeverity(b) - scoreSeverity(a);
-        return s !== 0 ? s : b.affectedPopulation - a.affectedPopulation;
-      });
-    } else {
-      copy.sort((a, b) => b.affectedPopulation - a.affectedPopulation);
-    }
-    return copy;
-  }, [filteredData, sortBy]);
+  }, [county, severity]);
 
   const kpis = useMemo(() => {
-    const sample = filteredData.length > 0 ? filteredData : initialData;
-    const coverage = Math.max(0, 100 - average(sample.map((g) => Math.min(100, g.stopDistanceMeters / 12))));
-    const frequencyMetric = average(
-      sample.map((g) =>
-        timeWindow === "Peak"
-          ? g.tripsPerHourPeak
-          : timeWindow === "Off-peak"
-            ? g.tripsPerHourOffpeak
-            : g.weekendTripsPerHour
-      )
-    );
-    const frequency = Math.min(100, frequencyMetric * 25);
-    const connectivity = Math.max(0, 100 - average(sample.map((g) => g.travelTimeIndex * 28)));
-    const populationNeed = Math.min(
-      100,
-      average(sample.map((g) => (g.seniorDensity + g.noVehicleRate + g.lowIncomeRate) * 100))
-    );
-    const firstLastMile = Math.max(
-      0,
-      100 - average(sample.map((g) => (g.hasBarrier ? 40 : 18) + g.stopDistanceMeters / 30))
-    );
-
+    const src = rows.length ? rows : DATA;
+    const n = src.length || 1;
+    const avgPop = Math.round(src.reduce((a, g) => a + g.population, 0) / n);
+    const cov = Math.max(0, 72 - avgPop / 550);
+    const freq = Math.min(92, 28 + avgPop / 400);
     return {
-      coverage,
-      frequency,
-      connectivity,
-      populationNeed,
-      firstLastMile,
+      coverage: Math.round(cov),
+      frequency: Math.round(freq),
+      equity: Math.min(92, Math.round(40 + avgPop / 500)),
+      connect: Math.max(44, Math.round(88 - avgPop / 800)),
+      lastMile: Math.max(38, Math.round(62 - avgPop / 600)),
     };
-  }, [filteredData, timeWindow]);
+  }, [rows]);
 
-  const insightItems = useMemo(() => {
-    const target = sortedData.slice(0, 3);
-    return target.map((gap, index) => ({
-      id: gap.id,
-      priority: index + 1,
-      severity: gap.severity,
-      text:
-        gap.severity === "High"
-          ? `Alta
+  const insights = rows.slice(0, 3);
+  const focus = pick ? DATA.find((g) => g.id === pick) ?? null : null;
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Kansas Transit Intelligence (PoC)</h1>
+        <p className="mt-1 text-sm text-zinc-500">Gaps · equity · energy (demo data)</p>
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {([
+          ["Coverage", kpis.coverage],
+          ["Frequency", kpis.frequency],
+          ["Population need", kpis.equity],
+          ["Connectivity", kpis.connect],
+          ["First/last mile", kpis.lastMile],
+        ] as const).map(([label, val]) => (
+          <div key={label} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+            <p className="text-xs text-zinc-500">{label}</p>
+            <p className="mt-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">{val}%</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="flex flex-wrap gap-3 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+        <label className="text-sm">
+          <span className="mr-2 text-zinc-500">County</span>
+          <select
+            className="rounded border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+            value={county}
+            onChange={(e) => setCounty(e.target.value)}
+          >
+            {COUNTIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="mr-2 text-zinc-500">Severity</span>
+          <select
+            className="rounded border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+            value={severity}
+            onChange={(e) => setSeverity(e.target.value as "All" | Severity)}
+          >
+            <option value="All">All</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+          </select>
+        </label>
+        <button
+          type="button"
+          className="rounded border border-zinc-300 px-3 py-1 text-sm hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
+          onClick={() => {
+            setCounty("All");
+            setSeverity("All");
+            setPick(null);
+          }}
+        >
+          Reset
+        </button>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+          <h2 className="mb-2 text-sm font-semibold">Map (demo)</h2>
+          <div className="relative h-56 rounded-md bg-gradient-to-br from-slate-800 to-slate-600">
+            {["Sedgwick", "Johnson", "Wyandotte", "Douglas"].map((name, i) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => setCounty(name)}
+                className={
+                  "absolute rounded border border-white/40 px-2 py-1 text-xs text-white shadow " +
+                  (name === "Sedgwick" || name === "Wyandotte"
+                    ? "bg-red-500/80"
+                    : name === "Johnson"
+                      ? "bg-amber-500/80"
+                      : "bg-emerald-500/80")
+                }
+                style={{ left: `${12 + i * 18}%`, top: `${20 + (i % 2) * 22}%`, width: "22%", height: "28%" }}
+              >
+                {name}
+              </button>
+            ))}
+            <p className="absolute bottom-2 right-2 rounded bg-black/40 px-2 py-1 text-[10px] text-white">
+              Click county to filter
+            </p>
+          </div>
+        </div>
+        <div className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+          <h2 className="mb-2 text-sm font-semibold">Insights</h2>
+          <ul className="space-y-2 text-xs text-zinc-700 dark:text-zinc-300">
+            {insights.map((g) => (
+              <li key={g.id}>
+                <button type="button" className="w-full rounded border border-zinc-200 p-2 text-left hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800" onClick={() => setPick(g.id)}>
+                  <span className={"rounded px-1 py-0.5 text-[10px] font-medium " + sevBadge(g.severity)}>{g.severity}</span>
+                  <p className="mt-1">{g.county}: {g.gapType}</p>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {focus && (
+            <p className="mt-3 rounded border border-indigo-200 bg-indigo-50 p-2 text-xs dark:border-indigo-900 dark:bg-indigo-950">
+              Selected: Route {focus.route} — {focus.action} (~{focus.energy} kWh/km)
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+        <h2 className="mb-2 text-sm font-semibold">Top gaps</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="text-xs text-zinc-500">
+              <tr>
+                <th className="pb-2 pr-2">County</th>
+                <th className="pb-2 pr-2">Route</th>
+                <th className="pb-2 pr-2">Type</th>
+                <th className="pb-2 pr-2">Sev.</th>
+                <th className="pb-2 pr-2">Pop.</th>
+                <th className="pb-2">kWh/km</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((g) => (
+                <tr
+                  key={g.id}
+                  className="cursor-pointer border-t border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                  onClick={() => setPick(g.id)}
+                >
+                  <td className="py-2 pr-2">{g.county}</td>
+                  <td className="py-2 pr-2">{g.route}</td>
+                  <td className="py-2 pr-2">{g.gapType}</td>
+                  <td className="py-2 pr-2">
+                    <span className={"rounded px-1 py-0.5 text-xs " + sevBadge(g.severity)}>{g.severity}</span>
+                  </td>
+                  <td className="py-2 pr-2">{g.population.toLocaleString()}</td>
+                  <td className="py-2">{g.energy.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
