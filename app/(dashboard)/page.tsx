@@ -11,7 +11,17 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
+
+const OverviewMap = dynamic(() => import("@/components/overview-map"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[min(420px,55vh)] w-full items-center justify-center bg-slate-900 text-sm text-slate-500">
+      Loading map…
+    </div>
+  ),
+});
 
 const KPIS = [
   { key: "geo", label: "Geographic Coverage", value: 67, trend: "up" as const, tone: "warning" as const, icon: MapPin },
@@ -138,50 +148,10 @@ export default function OverviewPage() {
                 </button>
               ))}
             </div>
-            <div className="relative h-[min(420px,55vh)] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800">
-              <div className="absolute inset-0 opacity-40 [background-image:radial-gradient(circle_at_2px_2px,#334155_1px,transparent_0)] [background-size:24px_24px]" />
-              {layers.gaps && (
-                <>
-                  <div
-                    className="absolute rounded-full border-2 border-red-500/50 bg-red-500/25"
-                    style={{ left: "18%", top: "38%", width: "22%", height: "35%" }}
-                  />
-                  <div
-                    className="absolute rounded-full border-2 border-amber-500/50 bg-amber-500/20"
-                    style={{ left: "48%", top: "22%", width: "18%", height: "28%" }}
-                  />
-                  <div
-                    className="absolute rounded-full border-2 border-emerald-500/50 bg-emerald-500/15"
-                    style={{ left: "62%", top: "48%", width: "16%", height: "22%" }}
-                  />
-                </>
-              )}
-              {layers.stops &&
-                [
-                  { l: "32%", t: "44%" },
-                  { l: "55%", t: "36%" },
-                  { l: "72%", t: "52%" },
-                ].map((p, i) => (
-                  <div
-                    key={i}
-                    className="absolute h-3 w-3 rounded-full border-2 border-sky-300 bg-sky-400 shadow-lg shadow-sky-900/50"
-                    style={{ left: p.l, top: p.t }}
-                  />
-                ))}
-              {layers.demographics && (
-                <div
-                  className="absolute rounded-full border border-dashed border-purple-400/50 bg-purple-500/10"
-                  style={{ left: "25%", top: "28%", width: "45%", height: "50%" }}
-                />
-              )}
-              {layers.energy && (
-                <div
-                  className="absolute rounded-full border border-cyan-400/40 bg-cyan-500/15"
-                  style={{ left: "40%", top: "40%", width: "35%", height: "40%" }}
-                />
-              )}
-              <p className="absolute bottom-3 left-3 rounded bg-black/50 px-2 py-1 text-[10px] text-slate-400">
-                Kansas — demo layers (Leaflet map can replace this panel)
+            <div className="relative">
+              <OverviewMap layers={layers} />
+              <p className="pointer-events-none absolute bottom-3 left-3 z-[500] rounded bg-black/55 px-2 py-1 text-[10px] text-slate-400">
+                Kansas · Dark basemap · Demo highway polyline eastbound
               </p>
             </div>
           </div>

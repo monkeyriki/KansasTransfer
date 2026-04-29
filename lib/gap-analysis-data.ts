@@ -1,5 +1,25 @@
 export const KANSAS_CENTER: [number, number] = [38.5, -98.0];
 
+/**
+ * Smoothed demo highway across Kansas (eastbound, loosely I-70-ish) for Overview map viz only —
+ * not authoritative geometry.
+ */
+export const DEMO_KANSAS_HIGHWAY_POLYLINE: [number, number][] = [
+  [39.348, -101.983],
+  [39.228, -101.442],
+  [39.12, -100.853],
+  [39.048, -100.222],
+  [39.026, -99.681],
+  [39.038, -99.086],
+  [39.058, -98.484],
+  [39.078, -97.892],
+  [39.088, -97.294],
+  [39.088, -96.674],
+  [39.078, -96.062],
+  [39.058, -95.448],
+  [39.038, -94.962],
+];
+
 /** Table + map circles (severity for styling). Matches PoC prototype. */
 export type MapGapZone = {
   id: string;
